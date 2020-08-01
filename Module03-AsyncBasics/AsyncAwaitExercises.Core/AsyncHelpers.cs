@@ -7,7 +7,8 @@ namespace AsyncAwaitExercises.Core
 {
     public class AsyncHelpers
     {
-        public static async Task<string> GetStringWithRetries(HttpClient client, string url, int maxTries = 3, CancellationToken token = default)
+        public static async Task<string> GetStringWithRetries(HttpClient client, string url, int maxTries = 3,
+            CancellationToken token = default)
         {
             // Create a method that will try to get a response from a given `url`, retrying `maxTries` number of times.
             // It should wait one second before the second try, and double the wait time before every successive retry
@@ -22,8 +23,48 @@ namespace AsyncAwaitExercises.Core
             // * `HttpClient.GetAsync` does not accept cancellation token (use `GetAsync` instead)
             // * you may use `EnsureSuccessStatusCode()` method
 
-            return string.Empty;
+            if (maxTries <= 1)
+            {
+                throw new ArgumentException(nameof(maxTries));
+            }
+
+            var wait = TimeSpan.FromSeconds(1);
+
+            var i = 0;
+
+            while (true)
+            {
+                i++;
+                try
+                {
+                    if (token.IsCancellationRequested)
+                    {
+                        throw new TaskCanceledException();
+                    }
+
+                    var response = await client.GetAsync(new Uri(url), token);
+
+                    response.EnsureSuccessStatusCode();
+
+                    return await response.Content.ReadAsStringAsync();
+                }
+                catch (Exception e)
+                {
+                    if (ShouldRetry(e) && i <= maxTries)
+                    {
+                        await Task.Delay(wait * i, token);
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+            }
         }
 
+        private static bool ShouldRetry(Exception exception)
+        {
+            return exception is HttpRequestException;
+        }
     }
 }
